@@ -7,7 +7,7 @@ Implementation source-code for <it>OcMesher</it>, which extracts a mesh for an u
 If you use OcMesher in your work, please cite our academic paper:
 
 <h3 align="center">
-    <a href=".">
+    <a href="https://arxiv.org/abs/2312.08364">
         View-Dependent Octree-based Mesh Extraction in Unbounded Scenes for Procedural Synthetic Data
     </a>
 </h3>
