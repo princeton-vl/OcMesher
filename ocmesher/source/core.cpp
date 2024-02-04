@@ -662,7 +662,9 @@ extern "C" {
                     std::swap(bei[j1], bei[j2]);
                     for (int k = 0; k < 4; k++) {
                         std::swap(searched[4*(j1-s) + k], searched[4*(j2-s) + k]);
-                        std::swap(tags[4*(j1-s) + k], tags[4*(j2-s) + k]);
+                        bool tmp = tags[4*(j1-s) + k];
+                        tags[4*(j1-s)+k] = tags[4*(j2-s) + k];
+                        tags[4*(j2-s)+k] = tmp;
                     }
                     j1++;
                     j2--;
