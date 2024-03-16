@@ -17,10 +17,10 @@ from .utils.timer import Timer
 class OcMesher:
     def __init__(self,
         cameras,
+        bounds,
         pixels_per_cube=8,
         inv_scale=10,
         min_dist=1,
-        center=(0, 0, 0), size=1e3,
         memory_limit_mb=1000,
         bisection_iters=15,
         enclosed=True,
@@ -35,7 +35,7 @@ class OcMesher:
         self.sdf_float_type = c_float
         self.sdf_np_float_type = np.float32
         self.sdf_AF = AsFloat
-
+        self.bounds = bounds
         self.memory_limit_mb = memory_limit_mb
 
         cam_poses, Ks, Hs, Ws = cameras
@@ -51,8 +51,8 @@ class OcMesher:
         self.inv_scale = self.np_float_type(inv_scale)
         self.min_dist = self.np_float_type(min_dist)
 
-        self.center = np.array(center, self.np_float_type)
-        self.size = self.np_float_type(size)
+        self.center = np.array([(bounds[0]+bounds[1]) / 2, (bounds[2]+bounds[3]) / 2, (bounds[4]+bounds[5]) / 2], self.np_float_type)
+        self.size = self.np_float_type(max(max(bounds[1] - bounds[0], bounds[3] - bounds[2]), bounds[5] - bounds[4]) * 1.1)
 
         self.bisection_iters = bisection_iters
         self.enclosed = enclosed
@@ -106,9 +106,9 @@ class OcMesher:
             sdfs_i = []
             if self.enclosed:
                 out_bound = np.zeros(len(XYZ), dtype=bool)
-                for i in range(3):
-                    out_bound |= XYZ[:, i] <= self.center[i] - self.size / 2
-                    out_bound |= XYZ[:, i] >= self.center[i] + self.size / 2
+                for c in range(3):
+                    out_bound |= XYZ[:, c] <= self.bounds[c*2]
+                    out_bound |= XYZ[:, c] >= self.bounds[c*2+1]
             for kernel in kernels:
                 sdf = kernel(XYZ)
                 if self.enclosed: sdf[out_bound] = 1
