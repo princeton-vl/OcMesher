@@ -65,7 +65,13 @@ extern "C" {
         T min_dist,
         int coarse_count,
         int memory_limit_mb,
-        int n_elements
+        int n_elements,
+        int edge_fine_factor,
+        int n_structure_edges,
+        T *structure_edges,
+        int n_structure_faces,
+        int *structure_faces,
+        T *structure_vertices
     ) {
         using namespace coarse;
         params::center = center;
@@ -78,17 +84,39 @@ extern "C" {
         params::coarse_count = coarse_count;
         params::memory_limit_mb = memory_limit_mb;
         params::n_elements = n_elements;
+        params::edge_fine_factor = edge_fine_factor;
+        params::n_structure_edges = n_structure_edges;
+        params::structure_edges = structure_edges;
+        params::n_structure_faces = n_structure_faces;
+        params::structure_faces = structure_faces;
+        params::structure_vertices = structure_vertices;
         node root;
         mark_leaf_node(root);
         memset(root.c.coords, 0, 3 * sizeof(int));
         root.c.L = 0;
         nodes.clear();
         nodes.push_back(root);
-        nodes_heap = std::priority_queue<pair<T, int> >();
-        nodes_heap.push(mp(projected_size(root.c), 0));
 
+        auto pre_queue = queue<int>();
+        pre_queue.push(0);
+        while (!pre_queue.empty()) {
+            int front = pre_queue.front();
+            int split = pre_split(nodes[front].c);
+            if (split) {
+                expand_octree(nodes, front);
+                for (int i = 0; i < 8; i++) pre_queue.push((int)nodes.size() - 1 - i);
+            }
+            pre_queue.pop();
+        }
+
+        nodes_heap = std::priority_queue<pair<T, int> >();
+        for (int i = 0; i < nodes.size(); i++) {
+            if (leaf_node(nodes[i])) {
+                nodes_heap.push(mp(projected_size(nodes[i].c), i));
+            }
+        }
         int t = 0;
-        while (!nodes_heap.empty() && nodes.size() < coarse_count) {
+        while (nodes_heap.size() < coarse_count) {
             pair<T, int> top = nodes_heap.top();
             if (top.first < occ_scale) break;
             nodes_heap.pop();

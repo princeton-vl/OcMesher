@@ -27,6 +27,7 @@ class OcMesher:
         simplify_occluded=True,
         visible_relax_iter=2,
         coarse_count=500000,
+        edge_fine_factor=4,
     ):
         dll = load_cdll(str(Path(__file__).parent.resolve()/"lib"/"core.so"))
         self.float_type = c_double
@@ -37,6 +38,8 @@ class OcMesher:
         self.sdf_AF = AsFloat
         self.bounds = bounds
         self.memory_limit_mb = memory_limit_mb
+        self.edge_fine_factor = edge_fine_factor
+        self.eps = 1e-3
 
         cam_poses, Ks, Hs, Ws = cameras
         self.n_cameras = len(cam_poses)
@@ -64,7 +67,8 @@ class OcMesher:
             POINTER(self.float_type), self.float_type,
             c_int32, POINTER(self.float_type),
             self.float_type, self.float_type, self.float_type,
-            c_int32, c_int32, c_int32,
+            c_int32, c_int32, c_int32, c_int32, c_int32, POINTER(self.float_type),
+            c_int32, POINTER(c_int32), POINTER(self.float_type),
         ], c_int32)
         register_func(self, dll, "fine_group", [], c_int32)
         register_func(self, dll, "fine_iteration", [POINTER(self.sdf_float_type)], c_int32)
@@ -116,7 +120,39 @@ class OcMesher:
             sdfs.append(np.stack(sdfs_i, -1).astype(self.sdf_np_float_type))
         return np.concatenate(sdfs, 0)
     
-    def __call__(self, kernels):
+    def __call__(self, kernels, structure_mesh=None):
+
+        if structure_mesh is not None:
+            edges = []
+            for f in range(len(structure_mesh.faces)):
+                for i in range(3):
+                    assert(structure_mesh.faces[f, i] != structure_mesh.faces[f, (i+1)%3])
+            for f1, f2 in  structure_mesh._trimesh.face_adjacency:
+                n1, n2 = structure_mesh.face_normals[f1], structure_mesh.face_normals[f2]
+                if not np.linalg.norm(n1 - n2) < self.eps:
+                    v = -1
+                    for i in range(3):
+                        if structure_mesh.faces[f1, i] not in structure_mesh.faces[f2]:
+                            v = i
+                    assert(v != -1)
+                    v1, v2 = structure_mesh.faces[f1, (v+1)%3], structure_mesh.faces[f1, (v+2)%3]
+                    edges.append((v1, v2))
+            structure_edges = np.zeros((len(edges), 6), dtype=self.np_float_type)
+            for i, (v1, v2) in enumerate(edges):
+                structure_edges[i, :3] = structure_mesh.vertices[v1]
+                structure_edges[i, 3:] = structure_mesh.vertices[v2]
+            n_structure_edges = len(structure_edges)
+            p_structure_edges = self.AF(structure_edges)
+            n_structure_faces = len(structure_mesh.faces)
+            p_structure_faces = AsInt(AC(structure_mesh.faces.astype(np.int32)))
+            p_structure_vertices = self.AF(AC(structure_mesh.vertices.astype(self.np_float_type)))
+        else:
+            n_structure_edges = 0
+            p_structure_edges = POINTER(self.float_type)()
+            n_structure_faces = 0
+            p_structure_faces = POINTER(c_int32)()
+            p_structure_vertices = POINTER(self.float_type)()
+
         n_elements = len(kernels)
         # octree only considering cameras, not sdf
         with Timer("coarse step part1"):
@@ -125,7 +161,9 @@ class OcMesher:
                 self.n_cameras, self.AF(self.cameras),
                 self.inview_pixels_per_cube, 
                 self.inv_scale, self.min_dist,
-                self.coarse_count, self.memory_limit_mb, n_elements
+                self.coarse_count, self.memory_limit_mb, n_elements,
+                self.edge_fine_factor, n_structure_edges, p_structure_edges,
+                n_structure_faces, p_structure_faces, p_structure_vertices
             )
         # start considering sdf
         with Timer("coarse step part2"), tqdm(total=n_blocks) as pbar:
