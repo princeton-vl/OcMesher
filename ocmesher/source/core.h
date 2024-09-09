@@ -58,6 +58,7 @@ typedef pair<int, pair<int, int> > int3;
 typedef pair<int, pair<int, pair<int, int> > > key_cube;
 typedef pair<int, key_cube> key_edge;
 
+inline T square(T x) { return x*x; }
 
 struct node {
     cube c;
@@ -69,8 +70,9 @@ int int_log(T x) {
 }
 
 namespace params {
-    int n_cams, memory_limit_mb, coarse_count, n_elements;
-    T *center, *cams;
+    int n_cams, memory_limit_mb, coarse_count, n_elements, edge_fine_factor, n_structure_edges, n_structure_faces;
+    int *structure_faces;
+    T *center, *cams, *structure_edges, *structure_vertices;
     T size, pixels_per_cube, occ_scale, min_dist;
 }
 
@@ -135,6 +137,154 @@ void projected_coords(cube c, int k, T *icoords, T *r) {
     }
 }
 
+class Vector3D {
+public:
+    T x, y, z;
+    Vector3D() {}
+    Vector3D(T x, T y, T z) : x(x), y(y), z(z) {}
+    Vector3D operator+(const Vector3D& other) const {
+        return {x + other.x, y + other.y, z + other.z};
+    }
+    Vector3D operator*(T other) const {
+        return {x * other, y * other, z * other};
+    }
+    Vector3D operator/(T other) const {
+        return {x / other, y / other, z / other};
+    }
+    Vector3D operator-(const Vector3D& other) const {
+        return {x - other.x, y - other.y, z - other.z};
+    }
+    T dot(const Vector3D& other) const {
+        return x * other.x + y * other.y + z * other.z;
+    }
+    Vector3D cross(const Vector3D& other) const {
+        return {
+            y * other.z - z * other.y,
+            z * other.x - x * other.z,
+            x * other.y - y * other.x
+        };
+    }
+    T norm() const {
+        return std::sqrt(x * x + y * y + z * z);
+    }
+};
+
+int pre_split(cube c) {
+    if (params::size/(1<<(c.L)) < 1e-2) return 0; // because of possible degenerate faces in the mesh
+    T center[3];
+    compute_center(center, c);
+    Vector3D center_(center[0], center[1], center[2]);
+    bool flag = 0;
+    int face_id, the_edge[2]={-1,-1};
+    int face_id2;
+    for (int i = 0; i < params::n_structure_faces; i++) {
+        const T eps = 1e-5, eps3=0;
+        Vector3D verts[3];
+        for (int j = 0; j < 3; j++) {
+            int k = 0;
+            verts[j].x = params::structure_vertices[params::structure_faces[i*3+j]*3+k];
+            k = 1;
+            verts[j].y = params::structure_vertices[params::structure_faces[i*3+j]*3+k];
+            k = 2;
+            verts[j].z = params::structure_vertices[params::structure_faces[i*3+j]*3+k];
+            
+        }
+        Vector3D v12 = verts[2] - verts[1];
+        T v12n = v12.norm();
+        if (v12n < eps) continue;
+        Vector3D v01 = verts[1] - verts[0], v02 = verts[2] - verts[0];
+        T v01n = v01.norm(), v02n = v02.norm();
+        if (v01n < eps || v02n < eps) continue;
+        Vector3D n = v01.cross(v02);
+        T plane_dist = (center_ - verts[0]).dot(n);
+        T n1 = n.norm();
+        T n2 = n1 * n1;
+        if (n1 < eps) continue;
+        Vector3D projected = center_ - n * plane_dist / n2;
+        plane_dist /= n1;
+        T p01 = v01.cross(projected - verts[0]).dot(n) / n2;
+        T p02 = -(v02.cross(projected - verts[0]).dot(n)) / n2;
+        T p12 = 1 - p01 - p02;
+        T dist;
+        if (p01 >= -eps && p02 >= -eps && p12 >= -eps) {
+            dist = fabs(plane_dist);
+        }
+        else {
+            dist = 1e9;
+            for (int j = 0; j < 3; j++) {
+                dist = min(dist, (projected - verts[j]).norm());
+            }
+            T k = (projected - verts[0]).dot(v01), edge_dist;
+            if (k >= 0 && k <= v01n*v01n) {
+                Vector3D v0p = projected - verts[0];
+                edge_dist = v0p.cross(v01).norm() / v01n;
+                dist = min(dist, edge_dist);
+            }
+            k = (projected - verts[0]).dot(v02);
+            if (k >= 0 && k <= v02n*v02n) {
+                Vector3D v0p = projected - verts[0];
+                edge_dist = v0p.cross(v02).norm() / v02n;
+                dist = min(dist, edge_dist);
+            }
+            k = (projected - verts[1]).dot(v12);
+            if (k >= 0 && k <= v12n*v12n) {
+                Vector3D v1p = projected - verts[1];
+                edge_dist = v1p.cross(v12).norm() / v12n;
+                dist = min(dist, edge_dist);
+            }
+            dist = sqrt(dist*dist + plane_dist*plane_dist);
+        }
+        if (dist <= sqrt(0.75)*params::size/(1<<(c.L))) {
+            if (!flag) {
+                face_id = i;
+                flag = 1;
+            }
+            else {
+                if (the_edge[0] != -1) {
+                    int cnt;
+                    if (the_edge[1] == -1) cnt = 1;
+                    else cnt = 2;
+                    bool flag_all = 0;
+                    for (int ie = 0; ie < cnt; ie++) {
+                        bool flag = 0;
+                        for (int k = 0; k < 3; k++) {
+                            if (the_edge[ie] == params::structure_faces[i*3+k]) {
+                                flag = 1;
+                                break;
+                            }
+                        }
+                        if (flag) {
+                            flag_all = 1;
+                            break;
+                        }
+                    }
+                    if (!flag_all) {
+                        return 1;
+                    }
+                }
+                else {
+                    face_id2 = i;
+                    int cnt = 0;
+                    for (int j = 0; j < 3; j++) {
+                        int v = params::structure_faces[face_id*3+j];
+                        for (int k = 0; k < 3; k++) {
+                            if (v == params::structure_faces[i*3+k]) {
+                                assert(cnt != 2); // this means the input mesh is non manifold
+                                the_edge[cnt++] = v;
+                                break;
+                            }
+                        }
+                    }
+                    if (cnt != 1 && cnt != 2) {
+                        return 1;
+                    }
+                }
+            }
+        }
+    }
+    return 0;
+}
+
 T projected_size(cube c, int k) {
     using namespace params;
     T *current_cam = cams + k * (12 + 9 + 2);
@@ -151,6 +301,36 @@ T projected_size(cube c) {
     for (int k = 0; k < params::n_cams; k++) {
         T size_k = projected_size(c, k);
         max_size = max(max_size, size_k);
+    }
+    if (params::structure_edges != NULL) {
+        T center[3];
+        compute_center(center, c);
+        bool flag = 0;
+        for (int i = 0; i < params::n_structure_edges; i++) {
+            T v01[3], v0c[3];
+            for (int j = 0; j < 3; j++) {
+                v01[j] = params::structure_edges[i*6+3+j] - params::structure_edges[i*6+j];
+                v0c[j] = center[j] - params::structure_edges[i*6+j];
+            }
+            T dot = 0, v01n2 = 0;
+            for (int j = 0; j < 3; j++) {
+                dot += v01[j] * v0c[j];
+                v01n2 += v01[j] * v01[j];
+            }
+            dot = min((T)1, max((T)0, dot / v01n2));
+            for (int j = 0; j < 3; j++) {
+                v0c[j] = params::structure_edges[i*6+j] + v01[j] * dot;
+            }
+            T dist2 = 0;
+            for (int j = 0; j < 3; j++) {
+                dist2 += square(v0c[j] - center[j]);
+            }
+            flag |= dist2 <= 0.75*square(params::size)/(1<<(2*(c.L)));
+            if (flag) break;
+        }
+        if (flag) {
+            max_size *= params::edge_fine_factor;
+        }
     }
     return max_size;
 }
