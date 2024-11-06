@@ -10,6 +10,7 @@ If you use OcMesher in your work, please cite our academic paper:
     <a href="https://arxiv.org/abs/2312.08364">
         View-Dependent Octree-based Mesh Extraction in Unbounded Scenes for Procedural Synthetic Data
     </a>
+    
     International Conference on 3D Vision 2025
 </h3>
 <p align="center">
