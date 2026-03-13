@@ -26,10 +26,10 @@ fi
 alias gx1="${compiler} \$CXXFLAGS -O3 -c -fpic -fopenmp "
 alias gx2="${compiler} \$LDFLAGS -O3 -shared -fopenmp "
 
-# Apple Silicon: enable native arch targeting for M-series NEON/AMX codegen
+# Apple Silicon: enable native arch targeting for M-series codegen
 if [ "${OS}" = "Darwin" ] && [ "${ARCH}" = "arm64" ]; then
-    alias gx1="${compiler} \$CXXFLAGS -O3 -mcpu=native -ffast-math -c -fpic -fopenmp "
-    alias gx2="${compiler} \$LDFLAGS -O3 -mcpu=native -ffast-math -shared -fopenmp "
+    alias gx1="${compiler} \$CXXFLAGS -O3 -mcpu=native -c -fpic -fopenmp "
+    alias gx2="${compiler} \$LDFLAGS -O3 -mcpu=native -shared -fopenmp "
 fi
 
 mkdir -p ocmesher/lib

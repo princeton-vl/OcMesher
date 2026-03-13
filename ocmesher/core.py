@@ -123,11 +123,15 @@ class OcMesher:
     def __call__(self, kernels, structure_mesh=None):
 
         if structure_mesh is not None:
+            trimesh_obj = getattr(structure_mesh, "_trimesh", structure_mesh)
+            if not hasattr(trimesh_obj, "face_adjacency"):
+                raise TypeError("structure_mesh must provide face adjacency data")
+
             edges = []
             for f in range(len(structure_mesh.faces)):
                 for i in range(3):
                     assert(structure_mesh.faces[f, i] != structure_mesh.faces[f, (i+1)%3])
-            for f1, f2 in  structure_mesh._trimesh.face_adjacency:
+            for f1, f2 in trimesh_obj.face_adjacency:
                 n1, n2 = structure_mesh.face_normals[f1], structure_mesh.face_normals[f2]
                 if not np.linalg.norm(n1 - n2) < self.eps:
                     v = -1

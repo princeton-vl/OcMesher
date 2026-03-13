@@ -96,14 +96,16 @@ extern "C" {
         root.c.L = 0;
         nodes.clear();
         nodes.push_back(root);
+        int leaf_count = 1;
 
         auto pre_queue = queue<int>();
         pre_queue.push(0);
         while (!pre_queue.empty()) {
             int front = pre_queue.front();
             int split = pre_split(nodes[front].c);
-            if (split) {
+            if (split && (coarse_count <= 0 || leaf_count + 7 <= coarse_count)) {
                 expand_octree(nodes, front);
+                leaf_count += 7;
                 for (int i = 0; i < 8; i++) pre_queue.push((int)nodes.size() - 1 - i);
             }
             pre_queue.pop();
@@ -116,7 +118,7 @@ extern "C" {
             }
         }
         int t = 0;
-        while (nodes_heap.size() < coarse_count) {
+        while (!nodes_heap.empty() && nodes_heap.size() < coarse_count) {
             pair<T, int> top = nodes_heap.top();
             if (top.first < occ_scale) break;
             nodes_heap.pop();
