@@ -19,10 +19,13 @@ If you use OcMesher in your work, please cite our academic paper:
 </p>
 
 ```
-@article{ocmesher2023view,
-  title={View-Dependent Octree-based Mesh Extraction in Unbounded Scenes for Procedural Synthetic Data},
+@inproceedings{ma2025mesh,
+  title={Mesh Extraction for Unbounded Scenes Using Camera-Aware Octrees},
   author={Ma, Zeyu and Raistrick, Alexander and Lipson, Lahav and Deng, Jia},
-  year={2023}
+  booktitle={2025 International Conference on 3D Vision (3DV)},
+  pages={845--854},
+  year={2025},
+  organization={IEEE}
 }
 ```
 
